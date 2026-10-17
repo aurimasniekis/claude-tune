@@ -4,7 +4,7 @@
 #   prompt  — mirrors the oh-my-zsh "robbyrussell" theme: ➜  dir git:(branch) ✗
 #   usage   — context window, cost, diff churn, rate limits, elapsed time
 #
-# Wide terminal:   both on one line, usage flush right.
+# Wide terminal:   both on one line, usage right after the prompt.
 # Narrow terminal: usage wraps to a second line, dropping low-priority
 #                  segments until what remains fits.
 
@@ -117,7 +117,7 @@ if [ -n "$branch" ]; then
 fi
 
 if [ -n "$model" ]; then
-  tag="$model"
+  tag="${model% (*context)}"   # "Opus 5.5 (1M context)" -> "Opus 5.5"; ctx shows the size
   [ -n "$effort" ] && [ "$effort" != "medium" ] && tag+=" ${effort}"
   l1+=" ${GREY}[${tag}"
   p1+=" [${tag}"
@@ -166,7 +166,12 @@ fi
 
 if [ -n "$rl7" ]; then
   c=$(pct_color "$rl7")
-  add_seg "${GREY}7d${RESET} ${c}${rl7}%${RESET}" "7d ${rl7}%" 3
+  s="${GREY}7d${RESET} ${c}${rl7}%${RESET}"; sp="7d ${rl7}%"
+  if [ -n "$rl7_at" ]; then
+    r=$(until_reset "${rl7_at%%.*}")
+    s+=" ${GREY}↻${r}${RESET}"; sp+=" ${GW_RESET}${r}"
+  fi
+  add_seg "$s" "$sp" 3
 fi
 
 if [ "${dur_ms:-0}" -gt 60000 ]; then
@@ -178,7 +183,10 @@ fi
 cols=${COLUMNS:-}
 [ -z "$cols" ] && cols=$(tput cols 2>/dev/null)
 case $cols in ''|*[!0-9]*) cols=100 ;; esac
-avail=$(( cols - 1 ))            # leave a column spare so nothing wraps
+# COLUMNS is the full terminal width, but Claude Code insets the status row,
+# so a line that long gets its right end clipped. Bump this if it still clips.
+EDGE=6
+avail=$(( cols - EDGE ))
 
 join_segs() { # -> l2 / p2 from the surviving segments
   local i sep_c="${GREY} · ${RESET}" sep_p=" ${GW_DOT} "
@@ -209,9 +217,9 @@ if [ -z "$l2" ]; then
   exit 0
 fi
 
-# Same line, usage flush right — only if everything fits with a 2-column gap.
-if [ $(( w1 + 2 + ${#p2} )) -le "$avail" ]; then
-  printf '%s%*s%s' "$l1" $(( avail - w1 - ${#p2} )) "" "$l2"
+# Same line, usage straight after the prompt — only if everything fits.
+if [ $(( w1 + 3 + ${#p2} )) -le "$avail" ]; then
+  printf '%s%s%s' "$l1" "${GREY} · ${RESET}" "$l2"
   exit 0
 fi
 
